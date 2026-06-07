@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digit Span Summary Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; background-color: #f4f4f9; }
+        .container { max-width: 500px; margin: 0 auto; padding: 20px; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .hidden { display: none; }
+        #display-box { font-size: 4rem; font-weight: bold; margin: 40px 0; min-height: 80px; color: #333; }
+        input[type="text"], input[type="number"] { font-size: 1.2rem; padding: 8px; width: 80%; text-align: center; margin-bottom: 15px; border: 2px solid #ccc; border-radius: 4px; }
+        button { font-size: 1.2rem; padding: 10px 20px; cursor: pointer; background-color: #28a745; color: white; border: none; border-radius: 4px; }
+        button:hover { background-color: #218838; }
+        .label { font-size: 1rem; font-weight: bold; color: #555; text-align: left; width: 80%; margin: 0 auto 5px auto; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="setup-screen">
+        <h2>Digit Span Memory Test</h2>
+        <p>Please enter your details to create your ID:</p>
+        
+        <div class="label">Initials (e.g., JS):</div>
+        <input type="text" id="initials-input" placeholder="e.g., JS" maxlength="4"><br>
+        
+        <div class="label">Year of Birth (e.g., 2009):</div>
+        <input type="number" id="year-input" placeholder="e.g., 2009" min="1900" max="2026"><br>
+        
+        <button id="start-btn">Start Test</button>
+    </div>
+
+    <div id="experiment-screen" class="hidden">
+        <h3>Round <span id="round-num">1</span> (Difficulty Span: <span id="span-num">3</span>)</h3>
+        <div id="display-box"></div>
+        
+        <div id="response-area" class="hidden">
+            <p>Type the sequence of numbers in the correct order:</p>
+            <input type="text" id="response-input" autocomplete="off"><br>
+            <button id="submit-btn">Submit Answer</button>
+        </div>
+    </div>
+
+    <div id="end-screen" class="hidden">
+        <h2>Study Completed</h2>
+        <p>Thank you! Your summary profile has been recorded securely in the database.</p>
+        <p><strong>You can now safely close this tab.</strong></p>
+    </div>
+</div>
+
+<script>
+    // --- YOUR LIVE GOOGLE WEB APP URL ---
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw_e_xVeAjZW213-mc6Qjsm6zZLOEaRt7j7RPYDKK8Tm54BbDdK6bG3B5-clCgqgmd3/exec";
+
+    // Global Trackers
+    let currentRound = 1;
+    let currentSpan = 3;       
+    let roundsAtCurrentSpan = 0; 
+    let incorrectAttempts = 0; 
+    let totalCorrectAnswers = 0;
+    let maxSuccessfulSpan = 0; 
+    let participantId = "";
+    let currentSequence = "";
+
+    const setupScreen = document.getElementById('setup-screen');
+    const experimentScreen = document.getElementById('experiment-screen');
+    const endScreen = document.getElementById('end-screen');
+    const displayBox = document.getElementById('display-box');
+    const responseArea = document.getElementById('response-area');
+    const responseInput = document.getElementById('response-input');
+
+    document.getElementById('start-btn').addEventListener('click', () => {
+        const initials = document.getElementById('initials-input').value.trim().toUpperCase();
+        const yearStr = document.getElementById('year-input').value.trim();
+        
+        if (!initials || yearStr.length < 2) {
+            alert("Please enter valid initials and a full year of birth.");
+            return;
+        }
+
+        const lastTwoOfYear = yearStr.slice(-2);
+        participantId = initials + lastTwoOfYear;
+
+        setupScreen.classList.add('hidden');
+        experimentScreen.classList.remove('hidden');
+        runRound();
+    });
+
+    function runRound() {
+        document.getElementById('round-num').innerText = currentRound;
+        document.getElementById('span-num').innerText = currentSpan;
+        responseArea.classList.add('hidden');
+        responseInput.value = "";
+        
+        currentSequence = Array.from({length: currentSpan}, () => Math.floor(Math.random() * 10)).join('');
+        let digitIndex = 0;
+        displayBox.innerText = "+"; 
+        
+        setTimeout(() => {
+            const interval = setInterval(() => {
+                if (digitIndex < currentSequence.length) {
+                    displayBox.innerText = currentSequence[digitIndex];
+                    digitIndex++;
+                } else {
+                    clearInterval(interval);
+                    displayBox.innerText = ""; 
+                    responseArea.classList.remove('hidden'); 
+                    responseInput.focus();
+                }
+            }, 1000); 
+        }, 1000);
+    }
+
+    document.getElementById('submit-btn').addEventListener('click', () => {
+        const userResponse = responseInput.value.trim();
+        if (!userResponse) {
+            alert("Please input your response sequence.");
+            return;
+        }
+
+        const isCorrect = (userResponse === currentSequence);
+        
+        // Immediate feedback pop-ups
+        if (isCorrect) {
+            alert("Correct!");
+            totalCorrectAnswers++;
+            if (currentSpan > maxSuccessfulSpan) {
+                maxSuccessfulSpan = currentSpan;
+            }
+        } else {
+            alert("Incorrect!");
+            incorrectAttempts++; 
+        }
+
+        // Rule check: 2 missed attempts total drops the participant out
+        if (incorrectAttempts >= 2) {
+            sendSummaryAndEnd();
+            return;
+        }
+
+        currentRound++;
+        roundsAtCurrentSpan++;
+
+        // Rule check: 2 rounds completed at this span size increases difficulty
+        if (roundsAtCurrentSpan >= 2) {
+            currentSpan++;
+            roundsAtCurrentSpan = 0; 
+        }
+
+        runRound();
+    });
+
+    function sendSummaryAndEnd() {
+        experimentScreen.classList.add('hidden');
+        endScreen.classList.remove('hidden');
+
+        const summaryData = {
+            participant: participantId,
+            max_span: maxSuccessfulSpan,
+            total_trials: currentRound,
+            total_correct: totalCorrectAnswers
+        };
+
+        fetch(GOOGLE_SCRIPT_URL, {
+            method: "POST",
+            mode: "no-cors", 
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(summaryData)
+        });
+    }
+</script>
+
+</body>
+</html>
